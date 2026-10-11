@@ -17,7 +17,7 @@ export class PaymentStateMachine {
       PaymentStatus.TIMEOUT,
       PaymentStatus.FAILED,
     ],
-    [PaymentStatus.APPROVED]: [PaymentStatus.CANCELLED],
+    [PaymentStatus.APPROVED]: [],
     [PaymentStatus.REJECTED]: [],
     [PaymentStatus.CANCELLED]: [],
     [PaymentStatus.FAILED]: [PaymentStatus.PROCESSING],

@@ -7,9 +7,11 @@ import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 
 export interface RegisteredUser {
+  id: string;
   email: string;
   password: string;
   accessToken: string;
+  refreshToken: string;
 }
 
 export async function createTestApp(): Promise<INestApplication> {
@@ -40,7 +42,12 @@ export async function registerUser(app: INestApplication): Promise<RegisteredUse
     password: 'Valid-password-123',
   };
   const response = await request(app.getHttpServer()).post('/v1/auth/register').send(user).expect(201);
-  return { ...user, accessToken: response.body.accessToken as string };
+  return {
+    ...user,
+    id: response.body.user.id as string,
+    accessToken: response.body.accessToken as string,
+    refreshToken: response.body.refreshToken as string,
+  };
 }
 
 export async function cleanupUser(app: INestApplication, email: string): Promise<void> {

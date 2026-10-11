@@ -50,4 +50,24 @@ describe('Authentication API', () => {
       .send({ email: 'not-an-email', password: 'short' })
       .expect(400);
   });
+
+  it('rotates refresh tokens and rejects reuse, including concurrent reuse', async () => {
+    const staleToken = user.refreshToken;
+    const responses = await Promise.all([
+      request(app.getHttpServer()).post('/v1/auth/refresh').send({ refreshToken: staleToken }),
+      request(app.getHttpServer()).post('/v1/auth/refresh').send({ refreshToken: staleToken }),
+    ]);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([201, 401]);
+    const rotatedToken = responses.find((response) => response.status === 201)?.body.refreshToken as string;
+    expect(rotatedToken).toBeTruthy();
+
+    await request(app.getHttpServer()).post('/v1/auth/refresh').send({ refreshToken: staleToken }).expect(401);
+
+    const nextRotation = await request(app.getHttpServer())
+      .post('/v1/auth/refresh')
+      .send({ refreshToken: rotatedToken })
+      .expect(201);
+    expect(nextRotation.body.refreshToken).not.toBe(rotatedToken);
+  });
 });

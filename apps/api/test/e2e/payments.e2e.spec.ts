@@ -1,14 +1,19 @@
 import request from 'supertest';
 import { INestApplication } from '@nestjs/common';
 import { createHmac, randomUUID } from 'node:crypto';
+import { FakePaymentProvider } from '@payflow/shared';
+import { PrismaService } from '../../src/prisma/prisma.service';
 import { cleanupUser, createTestApp, createTestWorkerApp, registerUser, RegisteredUser } from './test-app';
 
 describe('Payments API', () => {
   let app: INestApplication;
   let workerApp: INestApplication;
   let user: RegisteredUser;
+  let originalAllowedWebhookHosts: string | undefined;
 
   beforeAll(async () => {
+    originalAllowedWebhookHosts = process.env.ALLOWED_WEBHOOK_HOSTS;
+    process.env.ALLOWED_WEBHOOK_HOSTS = 'hooks.example.test';
     app = await createTestApp();
     workerApp = await createTestWorkerApp();
   });
@@ -25,6 +30,11 @@ describe('Payments API', () => {
   afterAll(async () => {
     await workerApp.close();
     await app.close();
+    if (originalAllowedWebhookHosts === undefined) {
+      delete process.env.ALLOWED_WEBHOOK_HOSTS;
+    } else {
+      process.env.ALLOWED_WEBHOOK_HOSTS = originalAllowedWebhookHosts;
+    }
   });
 
   it('creates an idempotent payment and reads its persisted state', async () => {
@@ -102,11 +112,153 @@ describe('Payments API', () => {
     expect(options?.headers).toMatchObject({
       'X-PayFlow-Signature': expect.stringMatching(/^sha256=/),
     });
+    expect(options).toMatchObject({
+      redirect: 'manual',
+      dispatcher: expect.anything(),
+    });
     const body = String(options?.body);
     const expectedSignature = createHmac('sha256', 'test-webhook-secret').update(body).digest('hex');
     expect(options?.headers).toMatchObject({
       'X-PayFlow-Signature': `sha256=${expectedSignature}`,
     });
     expect(JSON.parse(body).payload.payment.status).toBe('APPROVED');
+  });
+
+  it('cancels only pending payments and lets the worker finish stale outbox claims', async () => {
+    const auth = { Authorization: `Bearer ${user.accessToken}` };
+    const account = await request(app.getHttpServer())
+      .post('/v1/accounts')
+      .set(auth)
+      .send({ currency: 'USD' })
+      .expect(201);
+    const prisma = app.get(PrismaService);
+    const payment = await prisma.payment.create({
+      data: {
+        accountId: account.body.id as string,
+        userId: user.id,
+        amountMinor: 5100,
+        currency: 'USD',
+        description: 'cancel before dispatch',
+      },
+    });
+
+    await request(app.getHttpServer())
+      .post(`/v1/payments/${payment.id}/cancel`)
+      .set(auth)
+      .expect(201)
+      .expect(({ body }) => expect(body.status).toBe('CANCELLED'));
+
+    await prisma.outboxEvent.create({
+      data: {
+        eventType: 'payment.requested',
+        aggregateId: payment.id,
+        payload: { paymentId: payment.id },
+        status: 'PROCESSING',
+        claimedAt: new Date(Date.now() - 10 * 60 * 1000),
+        claimToken: 'orphaned-worker-claim',
+      },
+    });
+
+    const approvedPayment = await prisma.payment.create({
+      data: {
+        accountId: account.body.id as string,
+        userId: user.id,
+        amountMinor: 7200,
+        currency: 'USD',
+        description: 'stale worker claim',
+      },
+    });
+    const staleEvent = await prisma.outboxEvent.create({
+      data: {
+        eventType: 'payment.requested',
+        aggregateId: approvedPayment.id,
+        payload: { paymentId: approvedPayment.id },
+        status: 'PROCESSING',
+        claimedAt: new Date(Date.now() - 10 * 60 * 1000),
+        claimToken: 'orphaned-worker-claim',
+      },
+    });
+
+    const competingWorkerApp = await createTestWorkerApp();
+    const workerCalls = [
+      jest.spyOn(workerApp.get(FakePaymentProvider), 'execute'),
+      jest.spyOn(competingWorkerApp.get(FakePaymentProvider), 'execute'),
+    ];
+    try {
+      let recovered = await prisma.payment.findUniqueOrThrow({ where: { id: approvedPayment.id } });
+      for (let attempt = 0; attempt < 30 && recovered.status !== 'APPROVED'; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        recovered = await prisma.payment.findUniqueOrThrow({ where: { id: approvedPayment.id } });
+      }
+
+      expect(recovered.status).toBe('APPROVED');
+      expect(workerCalls.reduce((count, spy) => count + spy.mock.calls.length, 0)).toBe(1);
+      expect(
+        await prisma.ledgerEntry.count({
+          where: { paymentId: approvedPayment.id, entryType: 'DEBIT' },
+        }),
+      ).toBe(1);
+      await expect(prisma.outboxEvent.findUniqueOrThrow({ where: { id: staleEvent.id } })).resolves.toMatchObject({
+        status: 'PUBLISHED',
+        claimedAt: null,
+        claimToken: null,
+      });
+      await expect(prisma.payment.findUniqueOrThrow({ where: { id: payment.id } })).resolves.toMatchObject({
+        status: 'CANCELLED',
+      });
+      expect(await prisma.ledgerEntry.count({ where: { paymentId: payment.id } })).toBe(0);
+      await request(app.getHttpServer()).post(`/v1/payments/${approvedPayment.id}/cancel`).set(auth).expect(400);
+    } finally {
+      await competingWorkerApp.close();
+    }
+  });
+
+  it('retries a transient provider failure without duplicating the approval ledger entry', async () => {
+    const auth = { Authorization: `Bearer ${user.accessToken}` };
+    const account = await request(app.getHttpServer())
+      .post('/v1/accounts')
+      .set(auth)
+      .send({ currency: 'USD' })
+      .expect(201);
+    const prisma = app.get(PrismaService);
+    const payment = await prisma.payment.create({
+      data: {
+        accountId: account.body.id as string,
+        userId: user.id,
+        amountMinor: 2300,
+        currency: 'USD',
+        description: 'transient provider failure',
+      },
+    });
+    const event = await prisma.outboxEvent.create({
+      data: {
+        eventType: 'payment.requested',
+        aggregateId: payment.id,
+        payload: { paymentId: payment.id },
+      },
+    });
+    const provider = workerApp.get(FakePaymentProvider);
+    const execute = jest
+      .spyOn(provider, 'execute')
+      .mockRejectedValueOnce(new Error('temporary network failure'))
+      .mockResolvedValue({
+        status: 'APPROVED',
+        providerReference: 'retry-approved',
+        message: 'Approved after retry.',
+      });
+
+    let currentPayment = await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
+    for (let attempt = 0; attempt < 30 && currentPayment.status !== 'APPROVED'; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      currentPayment = await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
+    }
+
+    expect(currentPayment.status).toBe('APPROVED');
+    expect(execute).toHaveBeenCalledTimes(2);
+    await expect(prisma.outboxEvent.findUniqueOrThrow({ where: { id: event.id } })).resolves.toMatchObject({
+      status: 'PUBLISHED',
+      attempts: 2,
+    });
+    expect(await prisma.ledgerEntry.count({ where: { paymentId: payment.id, entryType: 'DEBIT' } })).toBe(1);
   });
 });

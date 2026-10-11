@@ -57,4 +57,29 @@ describe('PostgreSQL integration', () => {
       }),
     ).rejects.toThrow();
   });
+
+  it('enforces matching payment and account ownership in PostgreSQL', async () => {
+    const otherUser = await prisma.user.create({
+      data: {
+        email: `other-${randomUUID()}@example.test`,
+        passwordHash: 'test-only-hash',
+      },
+    });
+
+    try {
+      await expect(
+        prisma.payment.create({
+          data: {
+            accountId,
+            userId: otherUser.id,
+            amountMinor: 1234,
+            currency: 'USD',
+            description: 'cross-account ownership violation',
+          },
+        }),
+      ).rejects.toThrow();
+    } finally {
+      await prisma.user.delete({ where: { id: otherUser.id } });
+    }
+  });
 });

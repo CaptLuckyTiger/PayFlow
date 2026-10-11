@@ -1,17 +1,12 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
-import { PaymentStateMachine, PaymentStatus } from '@payflow/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
-import { FakePaymentProvider } from './fake-payment-provider';
 
 @Injectable()
 export class PaymentsService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly provider: FakePaymentProvider,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async create(userId: string, dto: CreatePaymentDto) {
     const account = await this.prisma.account.findFirst({
@@ -148,71 +143,18 @@ export class PaymentsService {
 
   async cancel(userId: string, paymentId: string) {
     const payment = await this.findById(userId, paymentId);
-    if (!PaymentStateMachine.canTransition(payment.status as PaymentStatus, PaymentStatus.CANCELLED)) {
+    if (payment.status !== 'PENDING') {
       throw new BadRequestException('Payment cannot be cancelled in its current state.');
     }
 
-    return this.prisma.payment.update({
-      where: { id: paymentId },
+    const cancelled = await this.prisma.payment.updateMany({
+      where: { id: paymentId, userId, status: 'PENDING' },
       data: { status: 'CANCELLED' },
     });
-  }
-
-  async processPayment(paymentId: string) {
-    const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
-    if (!payment) {
-      throw new NotFoundException('Payment not found.');
+    if (cancelled.count !== 1) {
+      throw new BadRequestException('Payment cannot be cancelled in its current state.');
     }
 
-    const result = await this.provider.execute({
-      id: payment.id,
-      amountMinor: payment.amountMinor,
-      description: payment.description,
-      currency: payment.currency,
-    });
-
-    if (result.status === 'APPROVED') {
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: 'APPROVED',
-          providerReference: result.providerReference ?? payment.providerReference,
-        },
-      });
-
-      await this.prisma.ledgerEntry.create({
-        data: {
-          accountId: payment.accountId,
-          paymentId: payment.id,
-          entryType: 'DEBIT',
-          amountMinor: payment.amountMinor,
-        },
-      });
-
-      return result;
-    }
-
-    if (result.status === 'REJECTED') {
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: 'REJECTED' },
-      });
-      return result;
-    }
-
-    if (result.status === 'TIMEOUT') {
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: 'TIMEOUT' },
-      });
-      return result;
-    }
-
-    await this.prisma.payment.update({
-      where: { id: payment.id },
-      data: { status: 'FAILED' },
-    });
-
-    return result;
+    return this.findById(userId, paymentId);
   }
 }

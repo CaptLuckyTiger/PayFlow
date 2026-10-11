@@ -37,47 +37,49 @@ enum WebhookDeliveryStatus {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  passwordHash String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  accounts  Account[]
-  payments  Payment[] @relation("PaymentOwner")
-  webhookEndpoints WebhookEndpoint[]
+  id                 String              @id @default(cuid())
+  email              String              @unique
+  passwordHash       String
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  accounts           Account[]
+  payments           Payment[]           @relation("PaymentOwner")
+  webhookEndpoints   WebhookEndpoint[]
   idempotencyRecords IdempotencyRecord[]
+  refreshTokens      RefreshToken[]
 
   @@index([email])
 }
 
 model Account {
-  id          String   @id @default(cuid())
-  userId      String
-  currency    String   @db.VarChar(3)
-  status      AccountStatus @default(ACTIVE)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  payments    Payment[]
+  id            String        @id @default(cuid())
+  userId        String
+  currency      String        @db.VarChar(3)
+  status        AccountStatus @default(ACTIVE)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments      Payment[]
   ledgerEntries LedgerEntry[]
 
+  @@unique([id, userId])
   @@index([userId, status])
 }
 
 model Payment {
-  id             String        @id @default(cuid())
-  accountId      String
-  userId         String
-  amountMinor    Int
-  currency       String        @db.VarChar(3)
-  status         PaymentStatus @default(PENDING)
+  id                String             @id @default(cuid())
+  accountId         String
+  userId            String
+  amountMinor       Int
+  currency          String             @db.VarChar(3)
+  status            PaymentStatus      @default(PENDING)
   providerReference String?
-  description    String
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  account        Account       @relation(fields: [accountId], references: [id], onDelete: Restrict)
-  user           User          @relation("PaymentOwner", fields: [userId], references: [id], onDelete: Cascade)
-  ledgerEntries  LedgerEntry[]
+  description       String
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  account           Account            @relation(fields: [accountId, userId], references: [id, userId], onDelete: Restrict)
+  user              User               @relation("PaymentOwner", fields: [userId], references: [id], onDelete: Cascade)
+  ledgerEntries     LedgerEntry[]
   idempotencyRecord IdempotencyRecord?
 
   @@index([accountId, status])
@@ -85,17 +87,17 @@ model Payment {
 }
 
 model LedgerEntry {
-  id        String   @id @default(cuid())
-  accountId String
-  paymentId String?
-  entryType LedgerEntryType
+  id          String          @id @default(cuid())
+  accountId   String
+  paymentId   String?
+  entryType   LedgerEntryType
   amountMinor Int
-  createdAt DateTime @default(now())
-  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  createdAt   DateTime        @default(now())
+  account     Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  payment     Payment?        @relation(fields: [paymentId], references: [id], onDelete: SetNull)
 
-  @@index([accountId, createdAt])
   @@unique([paymentId, entryType])
+  @@index([accountId, createdAt])
 }
 
 model IdempotencyRecord {
@@ -112,44 +114,58 @@ model IdempotencyRecord {
   @@index([userId, createdAt])
 }
 
+model RefreshToken {
+  id        String    @id @default(cuid())
+  jti       String    @unique
+  userId    String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt, expiresAt])
+}
+
 model OutboxEvent {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   eventType   String
   aggregateId String
   payload     Json
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
   publishedAt DateTime?
-  attempts    Int      @default(0)
-  status      String   @default("PENDING")
+  attempts    Int       @default(0)
+  status      String    @default("PENDING")
   lastError   String?
+  claimedAt   DateTime?
+  claimToken  String?
 
   @@index([status, createdAt])
 }
 
 model WebhookEndpoint {
-  id          String   @id @default(cuid())
-  userId      String
-  url         String
-  secret      String
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deliveries  WebhookDelivery[]
+  id         String            @id @default(cuid())
+  userId     String
+  url        String
+  secret     String
+  active     Boolean           @default(true)
+  createdAt  DateTime          @default(now())
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
 
   @@index([userId, active])
 }
 
 model WebhookDelivery {
-  id          String    @id @default(cuid())
-  endpointId  String
-  eventId     String
-  status      WebhookDeliveryStatus @default(PENDING)
-  attempts    Int       @default(0)
+  id            String                @id @default(cuid())
+  endpointId    String
+  eventId       String
+  status        WebhookDeliveryStatus @default(PENDING)
+  attempts      Int                   @default(0)
   nextAttemptAt DateTime?
-  lastError   String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  endpoint    WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  lastError     String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  endpoint      WebhookEndpoint       @relation(fields: [endpointId], references: [id], onDelete: Cascade)
 
   @@unique([endpointId, eventId])
   @@index([endpointId, status, nextAttemptAt])
