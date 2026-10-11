@@ -1,0 +1,17 @@
+node_modules
+.env
+.env.*
+!.env.example
+coverage
+apps/**/dist
+packages/**/dist
+prisma/generated
+**/*.tsbuildinfo
+apps/api/test/**/*.spec.js
+apps/api/test/**/*.spec.d.ts
+apps/api/test/**/*.spec.js.map
+packages/shared/src/**/*.js
+packages/shared/src/**/*.js.map
+packages/shared/src/**/*.d.ts
+.DS_Store
+npm-debug.log*

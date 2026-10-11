@@ -1,0 +1,8 @@
+node_modules
+**/dist
+coverage
+package-lock.json
+**/*.d.ts
+**/*.js.map
+apps/**/test/**/*.spec.js
+packages/shared/src/**/*.js
