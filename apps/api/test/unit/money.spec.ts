@@ -1,6 +1,5 @@
 import { Money } from '@payflow/shared';
 import { PaymentStateMachine, PaymentStatus } from '@payflow/shared';
-import { ConfigService } from '@nestjs/config';
 import { getRequiredJwtSecret } from '../../src/auth/jwt-secrets';
 
 describe('Money', () => {
@@ -31,9 +30,15 @@ describe('PaymentStateMachine', () => {
 
 describe('JWT secrets', () => {
   it('requires configured secrets of at least 32 characters', () => {
-    expect(() => getRequiredJwtSecret(new ConfigService({ JWT_SECRET: 'short' }), 'JWT_SECRET')).toThrow(
-      /at least 32 characters/,
-    );
-    expect(getRequiredJwtSecret(new ConfigService({ JWT_SECRET: 'a'.repeat(32) }), 'JWT_SECRET')).toBe('a'.repeat(32));
+    const shortSecretConfig = {
+      get: (key: 'JWT_SECRET' | 'JWT_REFRESH_SECRET') => (key === 'JWT_SECRET' ? 'short' : undefined),
+    };
+    const validSecret = 'a'.repeat(32);
+    const validSecretConfig = {
+      get: (key: 'JWT_SECRET' | 'JWT_REFRESH_SECRET') => (key === 'JWT_SECRET' ? validSecret : undefined),
+    };
+
+    expect(() => getRequiredJwtSecret(shortSecretConfig, 'JWT_SECRET')).toThrow(/at least 32 characters/);
+    expect(getRequiredJwtSecret(validSecretConfig, 'JWT_SECRET')).toBe(validSecret);
   });
 });
