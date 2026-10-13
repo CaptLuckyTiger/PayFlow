@@ -4,9 +4,9 @@ PayFlow is a NestJS + Prisma + PostgreSQL + Redis payment simulation backend tha
 
 ## Stack
 
-- Node.js 20 LTS
+- Node.js 24.9.0 or later
 - TypeScript strict mode
-- NestJS 10
+- NestJS 12
 - PostgreSQL 16
 - Prisma 5
 - Redis 7

@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import request from 'supertest';
 import { INestApplication } from '@nestjs/common';
 import { createHmac, randomUUID } from 'node:crypto';

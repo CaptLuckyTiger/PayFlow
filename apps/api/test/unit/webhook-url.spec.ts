@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { parseAllowedWebhookHosts, resolvePublicWebhookAddresses, validateWebhookUrl } from '@payflow/shared';
 
 describe('webhook destination policy', () => {

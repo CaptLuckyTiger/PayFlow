@@ -2,6 +2,7 @@ module.exports = {
   rootDir: '../../../..',
   testEnvironment: 'node',
   testMatch: ['**/test/unit/**/*.spec.ts'],
+  extensionsToTreatAsEsm: ['.ts'],
   transform: {
     '^.+\\.[tj]s$': ['ts-jest', { useESM: true, tsconfig: '<rootDir>/apps/api/test/tsconfig.json' }],
   },

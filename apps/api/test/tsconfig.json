@@ -4,8 +4,8 @@
     "rootDir": "../../..",
     "noEmit": true,
     "isolatedModules": true,
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext"
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
   },
   "include": ["../src/**/*.ts", "../../worker/src/**/*.ts", "**/*.ts"]
 }
