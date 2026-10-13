@@ -1,11 +1,15 @@
 # PayFlow
 
-PayFlow is a NestJS + Prisma + PostgreSQL + Redis payment simulation backend that demonstrates an idempotent payment workflow, transactional outbox, queued processing, and webhook support.
+PayFlow é uma API backend de simulação de pagamentos, desenvolvida com NestJS, Prisma, PostgreSQL e Redis. A solução demonstra um fluxo de pagamento idempotente, uso de outbox transacional, processamento em fila e suporte a webhooks.
 
-## Stack
+## Visão geral
 
-- Node.js 24.9.0 or later
-- TypeScript strict mode
+A aplicação foi estruturada para modelar cenários reais de processamento financeiro com foco em confiabilidade, consistência e rastreabilidade. O projeto cobre autenticação, gestão de contas, criação e consulta de pagamentos, cancelamento de transações pendentes e entrega de eventos via webhook.
+
+## Stack tecnológica
+
+- Node.js 24.9.0 ou superior
+- TypeScript com strict mode
 - NestJS 12
 - PostgreSQL 16
 - Prisma 5
@@ -15,34 +19,54 @@ PayFlow is a NestJS + Prisma + PostgreSQL + Redis payment simulation backend tha
 - Swagger / OpenAPI
 - Jest + Supertest
 
-## Quick start
+## Requisitos
 
-1. Install locked dependencies:
+- Node.js 24.9.0 ou superior
+- Docker e Docker Compose
+- PostgreSQL e Redis em containers locais
+- Acesso a uma terminal para execução de scripts e migrações
+
+## Início rápido
+
+1. Instale as dependências com lockfile:
+
    ```sh
    npm ci
    ```
-2. Copy `.env.example` to `.env`. Set different random values of at least 32 characters for `JWT_SECRET` and `JWT_REFRESH_SECRET` (for example, generate each with `openssl rand -base64 48`).
-3. Start infrastructure:
+
+2. Copie o arquivo `.env.example` para `.env` e configure valores seguros para `JWT_SECRET` e `JWT_REFRESH_SECRET`. Recomenda-se gerar chaves com pelo menos 32 caracteres, por exemplo:
+
+   ```sh
+   openssl rand -base64 48
+   ```
+
+3. Inicie os serviços de infraestrutura:
+
    ```sh
    docker compose up -d postgres redis
    ```
-4. Generate Prisma Client and apply the checked-in migrations:
+
+4. Gere o Prisma Client e aplique as migrações versionadas:
+
    ```sh
    npm run db:generate
    npm run db:deploy
    ```
-5. Start API and worker in separate terminals:
+
+5. Inicie a API e o worker em terminais separados:
+
    ```sh
    npm run dev:api
    npm run dev:worker
    ```
 
-The Compose PostgreSQL service is exposed at `127.0.0.1:5433` to avoid conflicting with a PostgreSQL server already using host port `5432`. Redis is exposed at `127.0.0.1:6379`.
-The API exits during startup if either JWT secret is absent, shorter than 32 characters, or identical to the other.
+O PostgreSQL do Compose fica disponível em `127.0.0.1:5433` para evitar conflitos com uma instância local já exposta na porta `5432`. O Redis está disponível em `127.0.0.1:6379`.
 
-## Validate locally
+A aplicação encerra a inicialização se qualquer segredo JWT estiver ausente, tiver menos de 32 caracteres ou for idêntico ao outro.
 
-With Docker Desktop running and `.env` configured, run:
+## Validação local
+
+Com o Docker em execução e o arquivo `.env` configurado, execute:
 
 ```sh
 npm run build
@@ -53,23 +77,25 @@ npm run test:integration
 npm run test:e2e
 ```
 
-The integration suite requires PostgreSQL. The E2E suite also starts the API and outbox worker in-process and requires both PostgreSQL and Redis.
+A suíte de integração exige PostgreSQL. A suíte E2E também inicia a API e o worker de outbox em processo e requer PostgreSQL e Redis.
 
-## Webhook delivery policy
+## Política de entrega de webhooks
 
-- Webhook endpoints must use HTTPS on the default port, without URL credentials or fragments.
-- `ALLOWED_WEBHOOK_HOSTS` is an optional comma-separated list of exact hostnames. When set, only those hosts can be registered or delivered to; wildcards and suffix matches are not supported. Leave it empty to allow arbitrary hostnames that pass the public-address checks.
-- At delivery time the worker resolves the hostname for each new connection and rejects the destination if any resolved address is non-public, including private, loopback, link-local, reserved, or IPv4-mapped private addresses. The resolved public address is pinned to that connection to prevent DNS rebinding between validation and connect.
-- Redirects are not followed. A redirect response is treated as a failed delivery and may be retried.
-- Endpoint secrets are returned when the endpoint is created so the owner can configure signature verification. They are not returned by list APIs. The current database stores endpoint secrets in plaintext; use only trusted local data until encryption-at-rest and production secret management are implemented.
+- Endpoints de webhook devem usar HTTPS na porta padrão, sem credenciais na URL e sem fragmentos.
+- `ALLOWED_WEBHOOK_HOSTS` é uma lista opcional de hosts exatos separados por vírgula. Quando configurada, apenas esses hosts podem ser registrados ou utilizados para entrega; wildcards e correspondências por sufixo não são permitidos. Quando vazia, qualquer hostname público compatível com as validações pode ser aceito.
+- No momento da entrega, o worker resolve o hostname de cada conexão e rejeita o destino se qualquer endereço resolvido for não público, incluindo redes privadas, loopback, link-local, reservadas ou endereços IPv4 mapeados para redes privadas. O endereço público resolvido é fixado na conexão para prevenir rebinding de DNS entre a validação e a conexão real.
+- Redirecionamentos não são seguidos. Uma resposta de redirecionamento é tratada como falha na entrega e pode ser reenviada.
+- Os segredos dos endpoints são retornados na criação do registro para permitir que o proprietário configure verificação de assinatura. Eles não são expostos pelas APIs de listagem. O banco atual armazena esses segredos em texto puro; use apenas dados locais confiáveis até a implementação de criptografia em repouso e gerenciamento seguro de segredos em ambiente de produção.
 
-## Payment and worker guarantees
+## Garantias de pagamento e processamento
 
-- A payment may be cancelled only while `PENDING`. Cancellation is a conditional database update, so it cannot override a concurrent worker transition. Cancelling an approved payment is not supported because no refund/ledger reversal flow exists.
-- Outbox claims have a five-minute lease and a heartbeat while payment processing is active. A later poll reclaims claims left stale by a worker crash. Ledger writes are idempotent by payment and entry type.
-- The payment provider is a simulator. If a real provider is added, provider requests must use the payment ID as an idempotency key; the current worker lease alone cannot guarantee exactly-once effects at an external provider.
+- Um pagamento só pode ser cancelado enquanto estiver em estado `PENDING`. O cancelamento é realizado por uma atualização condicional no banco de dados, de modo que não sobrescreve uma transição concorrente do worker.
+- O cancelamento de um pagamento aprovado não é suportado, pois não existe um fluxo de reembolso ou reversão de ledger.
+- A concessão de claims do outbox possui prazo de cinco minutos e mantém um heartbeat enquanto o processamento do pagamento está ativo. Uma nova verificação reativa claims abandonados após falha de worker.
+- As escritas no ledger são idempotentes por pagamento e tipo de entrada.
+- O provedor de pagamento é um simulador. Se um provedor real for adicionado, as requisições devem usar o ID do pagamento como chave de idempotência; a concessão do worker por si só não garante efeitos exactly-once em um provedor externo.
 
-## Required endpoints
+## Endpoints obrigatórios
 
 - `POST /v1/auth/register`
 - `POST /v1/auth/login`
@@ -88,13 +114,17 @@ The integration suite requires PostgreSQL. The E2E suite also starts the API and
 - `DELETE /v1/webhooks/endpoints/:id`
 - `GET /v1/webhooks/deliveries`
 
-## Notes
+## Observações importantes
 
-- Money is stored as integer minor units to prevent float precision issues.
-- Payment idempotency is enforced with a unique `(userId, key)` index and a request hash.
-- The outbox persists events before publication and worker recovery replays them.
-- Webhook payloads are signed with HMAC-SHA256 and include event metadata.
-- PostgreSQL is published on host port `5433` to avoid conflicts with a local PostgreSQL service on `5432`.
-- PostgreSQL enforces positive payment and ledger amounts through a custom SQL migration; Prisma 5 does not express these check constraints in its schema language.
-- PostgreSQL enforces that each payment's account belongs to the same user through a composite foreign key.
-- Refresh tokens are persisted and rotated atomically; a token can only be used once before expiry.
+- O valor monetário é armazenado em unidades menores para evitar problemas de precisão com ponto flutuante.
+- A idempotência do pagamento é garantida por um índice único em `(userId, key)` e por um hash da requisição.
+- O outbox persiste eventos antes da publicação e a recuperação do worker os reprocessa.
+- Os payloads de webhook são assinados com HMAC-SHA256 e incluem metadados do evento.
+- O PostgreSQL é exposto na porta `5433` para evitar conflitos com uma instância local em `5432`.
+- O PostgreSQL impõe valores positivos para pagamentos e entradas de ledger por meio de uma migração SQL customizada; o Prisma 5 não expressa esse tipo de constraint no schema.
+- O PostgreSQL garante que cada pagamento pertença à mesma conta do mesmo usuário por meio de uma chave composta.
+- Os refresh tokens são persistidos e rotacionados de forma atômica; um token só pode ser usado uma vez antes de expirar.
+
+## Licença
+
+Este projeto foi desenvolvido como demonstração de arquitetura de pagamentos e processamento assíncrono. Consulte os arquivos do repositório para verificar as condições específicas de uso e distribuição.
