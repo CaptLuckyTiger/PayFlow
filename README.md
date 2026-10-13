@@ -8,6 +8,7 @@ A aplicação foi estruturada para modelar cenários reais de processamento fina
 
 ## Stack tecnológica
 
+- React 19 + TypeScript + Vite (dashboard web)
 - Node.js 24.9.0 ou superior
 - TypeScript com strict mode
 - NestJS 12
@@ -59,6 +60,16 @@ A aplicação foi estruturada para modelar cenários reais de processamento fina
    npm run dev:api
    npm run dev:worker
    ```
+
+6. Inicie o dashboard em outro terminal:
+
+   ```sh
+   npm run dev:web
+   ```
+
+   Abra o endereço local exibido pelo Vite (normalmente `http://localhost:5173`). O dashboard conecta à API em `http://localhost:3000`; configure `VITE_API_URL` se a API estiver em outro endereço. Você pode criar uma conta pela tela de acesso ou usar uma conta já cadastrada. O painel mostra apenas pagamentos pertencentes ao usuário autenticado.
+
+O dashboard atual é um MVP para ambiente de simulação: inclui cadastro/login, resumo de pagamentos, atividade recente e busca/filtros. Os tokens de autenticação ficam em `sessionStorage` e são descartados ao encerrar a sessão da aba; para produção, substitua esse mecanismo por cookies `HttpOnly`, `Secure` e `SameSite` e proteja a aplicação contra XSS.
 
 O PostgreSQL do Compose fica disponível em `127.0.0.1:5433` para evitar conflitos com uma instância local já exposta na porta `5432`. O Redis está disponível em `127.0.0.1:6379`.
 
