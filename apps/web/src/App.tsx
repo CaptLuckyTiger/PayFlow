@@ -3,26 +3,41 @@ import type { CSSProperties, FormEvent } from 'react';
 import {
   ApiError,
   clearSession,
+  createAccount,
+  createPayment,
   getApiDocsUrl,
+  getPayment,
   getSession,
   getUserProfile,
+  listAccounts,
   listPayments,
   login,
   register,
   setSession,
+  type Account,
   type Payment,
   type User,
 } from './api';
 import './App.css';
 
 type AuthMode = 'login' | 'register';
-type PaymentFilter = 'all' | 'APPROVED' | 'PENDING' | 'PROCESSING' | 'REJECTED' | 'FAILED';
+type PaymentFilter = 'all' | Payment['status'];
 
-const paymentStatuses: PaymentFilter[] = ['all', 'APPROVED', 'PENDING', 'PROCESSING', 'REJECTED', 'FAILED'];
+const paymentStatuses: PaymentFilter[] = [
+  'all',
+  'APPROVED',
+  'PENDING',
+  'PROCESSING',
+  'REJECTED',
+  'FAILED',
+  'TIMEOUT',
+  'CANCELLED',
+];
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -32,15 +47,26 @@ function App() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [currency, setCurrency] = useState('BRL');
+  const [accountId, setAccountId] = useState('');
+  const [amount, setAmount] = useState('');
+  const [description, setDescription] = useState('');
+  const [page, setPage] = useState(1);
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
+  const pageSize = 8;
 
   const loadDashboard = useCallback(async (): Promise<boolean> => {
     const session = getSession();
     if (!session) return false;
 
     try {
-      const [profile, paymentList] = await Promise.all([getUserProfile(), listPayments()]);
+      const [profile, paymentList, accountList] = await Promise.all([getUserProfile(), listPayments(), listAccounts()]);
       setUser(profile);
       setPayments(paymentList);
+      setAccounts(accountList);
+      setAccountId((current) => current || accountList.find((account) => account.status === 'ACTIVE')?.id || '');
       setError('');
       return true;
     } catch (loadError) {
@@ -48,6 +74,8 @@ function App() {
         clearSession();
         setUser(null);
         setPayments([]);
+        setAccounts([]);
+        setAccountId('');
       }
       setError(getErrorMessage(loadError, 'Não foi possível carregar seus dados.'));
       return false;
@@ -78,6 +106,10 @@ function App() {
     ? approvedVolume.map(([currency, amount]) => formatMoney(amount, currency)).join(' · ')
     : '—';
   const activity = useMemo(() => buildActivity(payments), [payments]);
+  const pageCount = Math.max(1, Math.ceil(filteredPayments.length / pageSize));
+  const pagePayments = filteredPayments.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => setPage(1), [filter, search]);
 
   async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -112,6 +144,7 @@ function App() {
     clearSession();
     setUser(null);
     setPayments([]);
+    setAccounts([]);
     setError('');
     setNotice('');
   }
@@ -232,6 +265,60 @@ function App() {
             </div>
           )}
 
+          <section className="panel account-panel">
+            <div className="panel-heading">
+              <div>
+                <h2>Contas</h2>
+                <p>Contas simuladas usadas para receber pagamentos.</p>
+              </div>
+              <form
+                className="account-create"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  setActionBusy(true);
+                  setError('');
+                  try {
+                    const created = await createAccount(currency);
+                    setAccounts((items) => [created, ...items]);
+                    setAccountId(created.id);
+                    setNotice(`Conta ${created.currency} criada.`);
+                  } catch (cause) {
+                    setError(getErrorMessage(cause, 'Não foi possível criar a conta.'));
+                  } finally {
+                    setActionBusy(false);
+                  }
+                }}
+              >
+                <select aria-label="Moeda da nova conta" value={currency} onChange={(event) => setCurrency(event.target.value)}>
+                  <option>BRL</option>
+                  <option>USD</option>
+                  <option>EUR</option>
+                </select>
+                <button className="button button-secondary" disabled={actionBusy} type="submit">
+                  + Nova conta
+                </button>
+              </form>
+            </div>
+            {accounts.length ? (
+              <div className="account-list">
+                {accounts.map((account) => (
+                  <button
+                    className={`account-chip${accountId === account.id ? ' chosen' : ''}`}
+                    key={account.id}
+                    onClick={() => setAccountId(account.id)}
+                    type="button"
+                  >
+                    <strong>{account.currency}</strong>
+                    <span>{account.status === 'ACTIVE' ? 'Ativa' : account.status}</span>
+                    <small>{account.id.slice(-8)}</small>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="account-empty">Crie uma conta para começar a simular pagamentos.</p>
+            )}
+          </section>
+
           <section className="metric-grid" aria-label="Resumo da conta">
             <MetricCard
               label="Volume aprovado"
@@ -293,6 +380,46 @@ function App() {
                 <p>Consulte e filtre as transações da sua conta.</p>
               </div>
               <div className="table-actions">
+                <form
+                  className="payment-create"
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    const account = accounts.find((item) => item.id === accountId);
+                    if (!account || account.status !== 'ACTIVE') {
+                      setError('Crie ou selecione uma conta ativa antes de continuar.');
+                      return;
+                    }
+                    setActionBusy(true);
+                    setError('');
+                    try {
+                      const created = await createPayment({
+                        accountId,
+                        amountMinor: Math.round(Number(amount) * 100),
+                        currency: account.currency,
+                        description,
+                        idempotencyKey: crypto.randomUUID(),
+                      });
+                      setPayments((items) => [created, ...items]);
+                      setAmount('');
+                      setDescription('');
+                      setNotice('Pagamento enviado para simulação.');
+                    } catch (cause) {
+                      setError(getErrorMessage(cause, 'Não foi possível criar o pagamento.'));
+                    } finally {
+                      setActionBusy(false);
+                    }
+                  }}
+                >
+                  <input aria-label="Descrição do pagamento" minLength={3} onChange={(event) => setDescription(event.target.value)} placeholder="Descrição" required value={description} />
+                  <input aria-label="Valor do pagamento" min="0.01" onChange={(event) => setAmount(event.target.value)} placeholder="Valor" required step="0.01" type="number" value={amount} />
+                  <button
+                    className="button button-primary"
+                    disabled={actionBusy || !accounts.some((item) => item.id === accountId && item.status === 'ACTIVE')}
+                    type="submit"
+                  >
+                    Criar pagamento
+                  </button>
+                </form>
                 <label className="search-field">
                   <NavIcon name="search" />
                   <input
@@ -322,7 +449,36 @@ function App() {
                 </button>
               ))}
             </div>
-            <PaymentsTable payments={filteredPayments} />
+            <PaymentsTable
+              payments={pagePayments}
+              onSelect={async (payment) => {
+                setSelectedPayment(payment);
+                setDetailLoading(true);
+                try {
+                  setSelectedPayment(await getPayment(payment.id));
+                } catch (cause) {
+                  setError(getErrorMessage(cause, 'Não foi possível carregar o pagamento.'));
+                } finally {
+                  setDetailLoading(false);
+                }
+              }}
+            />
+            {filteredPayments.length > 0 && (
+              <div className="pagination">
+                <span>
+                  {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredPayments.length)} de {filteredPayments.length}
+                </span>
+                <button className="button button-secondary" disabled={page === 1} onClick={() => setPage((value) => value - 1)} type="button">
+                  Anterior
+                </button>
+                <span>
+                  Página {page} de {pageCount}
+                </span>
+                <button className="button button-secondary" disabled={page === pageCount} onClick={() => setPage((value) => value + 1)} type="button">
+                  Próxima
+                </button>
+              </div>
+            )}
           </section>
 
           <footer className="page-footer">
@@ -333,6 +489,32 @@ function App() {
           </footer>
         </div>
       </section>
+      {selectedPayment && (
+        <div className="modal-backdrop" onClick={() => setSelectedPayment(null)} role="presentation">
+          <section
+            aria-labelledby="payment-detail-title"
+            aria-modal="true"
+            className="detail-modal"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <button aria-label="Fechar detalhes" className="modal-close" onClick={() => setSelectedPayment(null)} type="button">
+              ×
+            </button>
+            <p className="eyebrow">DETALHES DO PAGAMENTO</p>
+            <h2 id="payment-detail-title">{selectedPayment.description}</h2>
+            {detailLoading && <p>Atualizando detalhes...</p>}
+            <dl>
+              <dt>Status</dt><dd>{translateStatus(selectedPayment.status)}</dd>
+              <dt>Valor</dt><dd>{formatMoney(selectedPayment.amountMinor, selectedPayment.currency)}</dd>
+              <dt>ID</dt><dd>{selectedPayment.id}</dd>
+              <dt>Referência</dt><dd>{selectedPayment.providerReference || '—'}</dd>
+              <dt>Criado em</dt><dd>{formatDate(selectedPayment.createdAt)}</dd>
+              <dt>Atualizado em</dt><dd>{formatDate(selectedPayment.updatedAt)}</dd>
+            </dl>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
@@ -577,7 +759,7 @@ function StatusBreakdown({ payments }: { payments: Payment[] }) {
   );
 }
 
-function PaymentsTable({ payments }: { payments: Payment[] }) {
+function PaymentsTable({ payments, onSelect }: { payments: Payment[]; onSelect: (payment: Payment) => void }) {
   if (!payments.length) {
     return (
       <div className="table-empty">
@@ -604,12 +786,12 @@ function PaymentsTable({ payments }: { payments: Payment[] }) {
         </thead>
         <tbody>
           {payments.map((payment) => (
-            <tr key={payment.id}>
+            <tr className="payment-row" key={payment.id} onClick={() => onSelect(payment)}>
               <td>
                 <div className="payment-name">
                   <span className="payment-avatar">{payment.description.slice(0, 1).toLocaleUpperCase()}</span>
                   <span>
-                    <strong>{payment.description}</strong>
+                  <strong>{payment.description}</strong>
                     <small>#{payment.id.slice(-8).toLocaleUpperCase()}</small>
                   </span>
                 </div>

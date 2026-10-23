@@ -23,6 +23,35 @@ export interface Payment {
   updatedAt: string;
 }
 
+export interface Account {
+  id: string;
+  currency: string;
+  status: 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
+  createdAt: string;
+}
+
+export async function listAccounts(): Promise<Account[]> {
+  return request<Account[]>('/v1/accounts');
+}
+
+export async function createAccount(currency: string): Promise<Account> {
+  return request<Account>('/v1/accounts', { method: 'POST', body: JSON.stringify({ currency }) });
+}
+
+export async function createPayment(input: {
+  accountId: string;
+  amountMinor: number;
+  currency: string;
+  description: string;
+  idempotencyKey: string;
+}): Promise<Payment> {
+  return request<Payment>('/v1/payments', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export async function getPayment(id: string): Promise<Payment> {
+  return request<Payment>(`/v1/payments/${encodeURIComponent(id)}`);
+}
+
 interface StoredSession {
   accessToken: string;
   refreshToken: string;
