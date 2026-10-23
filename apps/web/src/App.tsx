@@ -289,7 +289,11 @@ function App() {
                   }
                 }}
               >
-                <select aria-label="Moeda da nova conta" value={currency} onChange={(event) => setCurrency(event.target.value)}>
+                <select
+                  aria-label="Moeda da nova conta"
+                  value={currency}
+                  onChange={(event) => setCurrency(event.target.value)}
+                >
                   <option>BRL</option>
                   <option>USD</option>
                   <option>EUR</option>
@@ -410,8 +414,24 @@ function App() {
                     }
                   }}
                 >
-                  <input aria-label="Descrição do pagamento" minLength={3} onChange={(event) => setDescription(event.target.value)} placeholder="Descrição" required value={description} />
-                  <input aria-label="Valor do pagamento" min="0.01" onChange={(event) => setAmount(event.target.value)} placeholder="Valor" required step="0.01" type="number" value={amount} />
+                  <input
+                    aria-label="Descrição do pagamento"
+                    minLength={3}
+                    onChange={(event) => setDescription(event.target.value)}
+                    placeholder="Descrição"
+                    required
+                    value={description}
+                  />
+                  <input
+                    aria-label="Valor do pagamento"
+                    min="0.01"
+                    onChange={(event) => setAmount(event.target.value)}
+                    placeholder="Valor"
+                    required
+                    step="0.01"
+                    type="number"
+                    value={amount}
+                  />
                   <button
                     className="button button-primary"
                     disabled={actionBusy || !accounts.some((item) => item.id === accountId && item.status === 'ACTIVE')}
@@ -466,15 +486,26 @@ function App() {
             {filteredPayments.length > 0 && (
               <div className="pagination">
                 <span>
-                  {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredPayments.length)} de {filteredPayments.length}
+                  {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredPayments.length)} de{' '}
+                  {filteredPayments.length}
                 </span>
-                <button className="button button-secondary" disabled={page === 1} onClick={() => setPage((value) => value - 1)} type="button">
+                <button
+                  className="button button-secondary"
+                  disabled={page === 1}
+                  onClick={() => setPage((value) => value - 1)}
+                  type="button"
+                >
                   Anterior
                 </button>
                 <span>
                   Página {page} de {pageCount}
                 </span>
-                <button className="button button-secondary" disabled={page === pageCount} onClick={() => setPage((value) => value + 1)} type="button">
+                <button
+                  className="button button-secondary"
+                  disabled={page === pageCount}
+                  onClick={() => setPage((value) => value + 1)}
+                  type="button"
+                >
                   Próxima
                 </button>
               </div>
@@ -498,19 +529,30 @@ function App() {
             onClick={(event) => event.stopPropagation()}
             role="dialog"
           >
-            <button aria-label="Fechar detalhes" className="modal-close" onClick={() => setSelectedPayment(null)} type="button">
+            <button
+              aria-label="Fechar detalhes"
+              className="modal-close"
+              onClick={() => setSelectedPayment(null)}
+              type="button"
+            >
               ×
             </button>
             <p className="eyebrow">DETALHES DO PAGAMENTO</p>
             <h2 id="payment-detail-title">{selectedPayment.description}</h2>
             {detailLoading && <p>Atualizando detalhes...</p>}
             <dl>
-              <dt>Status</dt><dd>{translateStatus(selectedPayment.status)}</dd>
-              <dt>Valor</dt><dd>{formatMoney(selectedPayment.amountMinor, selectedPayment.currency)}</dd>
-              <dt>ID</dt><dd>{selectedPayment.id}</dd>
-              <dt>Referência</dt><dd>{selectedPayment.providerReference || '—'}</dd>
-              <dt>Criado em</dt><dd>{formatDate(selectedPayment.createdAt)}</dd>
-              <dt>Atualizado em</dt><dd>{formatDate(selectedPayment.updatedAt)}</dd>
+              <dt>Status</dt>
+              <dd>{translateStatus(selectedPayment.status)}</dd>
+              <dt>Valor</dt>
+              <dd>{formatMoney(selectedPayment.amountMinor, selectedPayment.currency)}</dd>
+              <dt>ID</dt>
+              <dd>{selectedPayment.id}</dd>
+              <dt>Referência</dt>
+              <dd>{selectedPayment.providerReference || '—'}</dd>
+              <dt>Criado em</dt>
+              <dd>{formatDate(selectedPayment.createdAt)}</dd>
+              <dt>Atualizado em</dt>
+              <dd>{formatDate(selectedPayment.updatedAt)}</dd>
             </dl>
           </section>
         </div>
@@ -791,7 +833,7 @@ function PaymentsTable({ payments, onSelect }: { payments: Payment[]; onSelect: 
                 <div className="payment-name">
                   <span className="payment-avatar">{payment.description.slice(0, 1).toLocaleUpperCase()}</span>
                   <span>
-                  <strong>{payment.description}</strong>
+                    <strong>{payment.description}</strong>
                     <small>#{payment.id.slice(-8).toLocaleUpperCase()}</small>
                   </span>
                 </div>
