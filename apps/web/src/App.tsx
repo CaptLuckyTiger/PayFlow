@@ -88,6 +88,11 @@ function App() {
     void loadDashboard();
   }, [loadDashboard]);
 
+  useEffect(() => {
+    if (accounts.some((account) => account.id === accountId && account.status === 'ACTIVE')) return;
+    setAccountId(accounts.find((account) => account.status === 'ACTIVE')?.id ?? '');
+  }, [accountId, accounts]);
+
   const filteredPayments = useMemo(() => {
     const normalizedSearch = search.trim().toLocaleLowerCase();
     return payments.filter((payment) => {
@@ -388,16 +393,19 @@ function App() {
                   className="payment-create"
                   onSubmit={async (event) => {
                     event.preventDefault();
-                    const account = accounts.find((item) => item.id === accountId);
+                    const account =
+                      accounts.find((item) => item.id === accountId && item.status === 'ACTIVE') ??
+                      accounts.find((item) => item.status === 'ACTIVE');
                     if (!account || account.status !== 'ACTIVE') {
                       setError('Crie ou selecione uma conta ativa antes de continuar.');
                       return;
                     }
+                    if (account.id !== accountId) setAccountId(account.id);
                     setActionBusy(true);
                     setError('');
                     try {
                       const created = await createPayment({
-                        accountId,
+                        accountId: account.id,
                         amountMinor: Math.round(Number(amount) * 100),
                         currency: account.currency,
                         description,
@@ -434,8 +442,13 @@ function App() {
                   />
                   <button
                     className="button button-primary"
-                    disabled={actionBusy || !accounts.some((item) => item.id === accountId && item.status === 'ACTIVE')}
+                    disabled={actionBusy}
                     type="submit"
+                    title={
+                      accounts.some((item) => item.status === 'ACTIVE')
+                        ? 'Criar pagamento'
+                        : 'Crie ou selecione uma conta ativa antes de criar um pagamento'
+                    }
                   >
                     Criar pagamento
                   </button>
@@ -828,7 +841,19 @@ function PaymentsTable({ payments, onSelect }: { payments: Payment[]; onSelect: 
         </thead>
         <tbody>
           {payments.map((payment) => (
-            <tr className="payment-row" key={payment.id} onClick={() => onSelect(payment)}>
+            <tr
+              aria-label={`Abrir detalhes de ${payment.description}`}
+              className="payment-row"
+              key={payment.id}
+              onClick={() => onSelect(payment)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onSelect(payment);
+                }
+              }}
+              tabIndex={0}
+            >
               <td>
                 <div className="payment-name">
                   <span className="payment-avatar">{payment.description.slice(0, 1).toLocaleUpperCase()}</span>
