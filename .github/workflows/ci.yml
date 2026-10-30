@@ -78,8 +78,10 @@ jobs:
           REDIS_URL: redis://localhost:6379
           JWT_SECRET: payflow-ci-access-secret-32-chars-long
           JWT_REFRESH_SECRET: payflow-ci-refresh-secret-32-chars-long
+          WEBHOOK_ENCRYPTION_KEY: payflow-ci-webhook-encryption-key-32-chars
 
       - name: Build API and worker
         run: npm run build
         env:
           DATABASE_URL: postgresql://payflow:payflow@localhost:5432/payflow?schema=public
+          WEBHOOK_ENCRYPTION_KEY: payflow-ci-webhook-encryption-key-32-chars

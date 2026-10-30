@@ -41,6 +41,9 @@ A aplicação foi estruturada para modelar cenários reais de processamento fina
    openssl rand -base64 48
    ```
 
+   Configure também `WEBHOOK_ENCRYPTION_KEY` com pelo menos 32 caracteres e mantenha essa chave
+   estável para preservar o acesso aos segredos de webhook já registrados.
+
 3. Inicie os serviços de infraestrutura:
 
    ```sh
@@ -96,7 +99,7 @@ A suíte de integração exige PostgreSQL. A suíte E2E também inicia a API e o
 - `ALLOWED_WEBHOOK_HOSTS` é uma lista opcional de hosts exatos separados por vírgula. Quando configurada, apenas esses hosts podem ser registrados ou utilizados para entrega; wildcards e correspondências por sufixo não são permitidos. Quando vazia, qualquer hostname público compatível com as validações pode ser aceito.
 - No momento da entrega, o worker resolve o hostname de cada conexão e rejeita o destino se qualquer endereço resolvido for não público, incluindo redes privadas, loopback, link-local, reservadas ou endereços IPv4 mapeados para redes privadas. O endereço público resolvido é fixado na conexão para prevenir rebinding de DNS entre a validação e a conexão real.
 - Redirecionamentos não são seguidos. Uma resposta de redirecionamento é tratada como falha na entrega e pode ser reenviada.
-- Os segredos dos endpoints são retornados na criação do registro para permitir que o proprietário configure verificação de assinatura. Eles não são expostos pelas APIs de listagem e são cifrados em repouso com AES-256-GCM usando uma chave derivada de `JWT_REFRESH_SECRET`.
+- Os segredos dos endpoints são retornados na criação do registro para permitir que o proprietário configure verificação de assinatura. Eles não são expostos pelas APIs de listagem e são cifrados em repouso com AES-256-GCM usando `WEBHOOK_ENCRYPTION_KEY`. Registros criados antes dessa configuração continuam compatíveis por meio do `JWT_REFRESH_SECRET` legado durante a migração.
 
 ## Garantias de pagamento e processamento
 

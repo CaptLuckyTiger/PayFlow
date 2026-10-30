@@ -43,6 +43,8 @@ flowchart LR
 - JWT is used for access and refresh tokens.
 - Webhook URLs are validated to reject localhost, private networks, and cloud metadata endpoints.
 - Payloads are signed with HMAC-SHA256.
+- Webhook secrets are encrypted at rest with AES-256-GCM using the dedicated `WEBHOOK_ENCRYPTION_KEY`;
+  legacy records can be read with the previous `JWT_REFRESH_SECRET` key during migration.
 - Rate limiting is enforced by a global `ThrottlerGuard` (30 requests per minute by default);
   authentication endpoints are limited to 5 requests per minute.
 - CORS is configured from `CORS_ORIGIN`, including the Vite development ports `5173` and `5174`.

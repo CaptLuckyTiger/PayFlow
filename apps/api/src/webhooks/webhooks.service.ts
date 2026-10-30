@@ -83,9 +83,12 @@ export class WebhooksService {
   }
 
   private getSecretKey(): string {
-    const key = this.config.get<string>('JWT_REFRESH_SECRET');
+    const key = this.config.get<string>('WEBHOOK_ENCRYPTION_KEY');
     if (!key) {
-      throw new Error('JWT_REFRESH_SECRET is required to protect webhook secrets.');
+      throw new Error('WEBHOOK_ENCRYPTION_KEY is required to protect webhook secrets.');
+    }
+    if (key.trim().length < 32) {
+      throw new Error('WEBHOOK_ENCRYPTION_KEY must be configured with at least 32 characters.');
     }
     return key;
   }

@@ -432,11 +432,23 @@ export class OutboxDispatcherService implements OnModuleInit, OnModuleDestroy {
         providerReference: payment.providerReference,
       },
     };
-    const encryptionKey = this.config.get<string>('JWT_REFRESH_SECRET');
+    const encryptionKey = this.config.get<string>('WEBHOOK_ENCRYPTION_KEY');
     if (!encryptionKey) {
-      throw new Error('JWT_REFRESH_SECRET is required to deliver webhooks.');
+      throw new Error('WEBHOOK_ENCRYPTION_KEY is required to deliver webhooks.');
     }
-    const signingSecret = decryptWebhookSecret(delivery.endpoint.secret, encryptionKey);
+    if (encryptionKey.trim().length < 32) {
+      throw new Error('WEBHOOK_ENCRYPTION_KEY must be configured with at least 32 characters.');
+    }
+    let signingSecret: string;
+    try {
+      signingSecret = decryptWebhookSecret(delivery.endpoint.secret, encryptionKey);
+    } catch (error) {
+      const legacyKey = this.config.get<string>('JWT_REFRESH_SECRET');
+      if (!legacyKey || legacyKey === encryptionKey) {
+        throw error;
+      }
+      signingSecret = decryptWebhookSecret(delivery.endpoint.secret, legacyKey);
+    }
     const signed = signWebhookPayload(signingSecret, delivery.eventId, payload);
     const requestOptions: RequestInit & { dispatcher: Agent } = {
       method: 'POST',
