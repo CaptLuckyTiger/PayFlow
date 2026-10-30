@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { parseAllowedWebhookHosts, validateWebhookUrl } from '@payflow/shared';
+import { encryptWebhookSecret, parseAllowedWebhookHosts, validateWebhookUrl } from '@payflow/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -12,14 +12,15 @@ export class WebhooksService {
 
   async createEndpoint(userId: string, url: string, secret: string, active = true) {
     this.validateWebhookUrl(url);
-    return this.prisma.webhookEndpoint.create({
+    const endpoint = await this.prisma.webhookEndpoint.create({
       data: {
         userId,
         url,
-        secret,
+        secret: encryptWebhookSecret(secret, this.getSecretKey()),
         active,
       },
     });
+    return { ...endpoint, secret };
   }
 
   async listEndpoints(userId: string) {
@@ -46,31 +47,31 @@ export class WebhooksService {
     return { deleted: true, id: endpointId };
   }
 
-  async listDeliveries(userId: string) {
-    return this.prisma.webhookDelivery.findMany({
-      where: {
-        endpoint: { userId },
-      },
-      select: {
-        id: true,
-        endpointId: true,
-        eventId: true,
-        status: true,
-        attempts: true,
-        nextAttemptAt: true,
-        lastError: true,
-        createdAt: true,
-        updatedAt: true,
-        endpoint: {
-          select: {
-            id: true,
-            url: true,
-            active: true,
-          },
+  async listDeliveries(userId: string, page: number, limit: number) {
+    const where = { endpoint: { userId } };
+    const [data, total] = await Promise.all([
+      this.prisma.webhookDelivery.findMany({
+        where,
+        select: {
+          id: true,
+          endpointId: true,
+          eventId: true,
+          status: true,
+          attempts: true,
+          nextAttemptAt: true,
+          lastError: true,
+          createdAt: true,
+          updatedAt: true,
+          endpoint: { select: { id: true, url: true, active: true } },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.webhookDelivery.count({ where }),
+    ]);
+
+    return { data, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   }
 
   private validateWebhookUrl(url: string): void {
@@ -79,5 +80,13 @@ export class WebhooksService {
     } catch (error) {
       throw new BadRequestException('Webhook destination is invalid.', { cause: error });
     }
+  }
+
+  private getSecretKey(): string {
+    const key = this.config.get<string>('JWT_REFRESH_SECRET');
+    if (!key) {
+      throw new Error('JWT_REFRESH_SECRET is required to protect webhook secrets.');
+    }
+    return key;
   }
 }

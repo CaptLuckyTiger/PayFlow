@@ -92,21 +92,21 @@ describe('Payments API', () => {
     expect(processed.body.status).toBe('APPROVED');
 
     const listed = await request(app.getHttpServer()).get('/v1/payments').set(auth).expect(200);
-    expect(listed.body.map((payment: { id: string }) => payment.id)).toContain(created.body.id);
+    expect(listed.body.data.map((payment: { id: string }) => payment.id)).toContain(created.body.id);
 
     const ledger = await request(app.getHttpServer())
       .get(`/v1/accounts/${account.body.id}/ledger`)
       .set(auth)
       .expect(200);
-    expect(ledger.body).toHaveLength(1);
-    expect(ledger.body[0].amountMinor).toBe(2400);
+    expect(ledger.body.data).toHaveLength(1);
+    expect(ledger.body.data[0].amountMinor).toBe(2400);
 
     let deliveries = await request(app.getHttpServer()).get('/v1/webhooks/deliveries').set(auth).expect(200);
-    for (let attempt = 0; attempt < 30 && deliveries.body[0]?.status !== 'SENT'; attempt += 1) {
+    for (let attempt = 0; attempt < 30 && deliveries.body.data[0]?.status !== 'SENT'; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 500));
       deliveries = await request(app.getHttpServer()).get('/v1/webhooks/deliveries').set(auth).expect(200);
     }
-    expect(deliveries.body[0]?.status).toBe('SENT');
+    expect(deliveries.body.data[0]?.status).toBe('SENT');
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, options] = fetchMock.mock.calls[0];
     expect(url).toBe('https://hooks.example.test/payflow');

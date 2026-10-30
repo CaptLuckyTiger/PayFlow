@@ -122,11 +122,18 @@ export class PaymentsService {
     }
   }
 
-  async list(userId: string) {
-    return this.prisma.payment.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-    });
+  async list(userId: string, page: number, limit: number) {
+    const [data, total] = await Promise.all([
+      this.prisma.payment.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.payment.count({ where: { userId } }),
+    ]);
+
+    return { data, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   }
 
   async findById(userId: string, paymentId: string) {

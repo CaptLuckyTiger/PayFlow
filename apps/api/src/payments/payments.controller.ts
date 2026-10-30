@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PaymentsService } from './payments.service';
+import { PaginationDto } from '../common/dto/pagination.dto';
 
 @ApiTags('payments')
 @Controller('v1/payments')
@@ -20,8 +21,8 @@ export class PaymentsController {
 
   @Get()
   @ApiOperation({ summary: 'List payments for the current user' })
-  async list(@CurrentUser() user: { userId: string }) {
-    return this.paymentsService.list(user.userId);
+  async list(@CurrentUser() user: { userId: string }, @Query() pagination: PaginationDto) {
+    return this.paymentsService.list(user.userId, pagination.page, pagination.limit);
   }
 
   @Get(':id')

@@ -42,6 +42,6 @@ describe('Accounts API', () => {
       .get(`/v1/accounts/${created.body.id}/ledger`)
       .set(auth)
       .expect(200);
-    expect(ledger.body).toEqual([]);
+    expect(ledger.body.data).toEqual([]);
   });
 });

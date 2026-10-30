@@ -35,12 +35,19 @@ export class AccountsService {
     return account;
   }
 
-  async ledger(userId: string, accountId: string) {
+  async ledger(userId: string, accountId: string, page: number, limit: number) {
     await this.findById(userId, accountId);
-    return this.prisma.ledgerEntry.findMany({
-      where: { accountId },
-      orderBy: { createdAt: 'desc' },
-      include: { payment: true },
-    });
+    const [data, total] = await Promise.all([
+      this.prisma.ledgerEntry.findMany({
+        where: { accountId },
+        orderBy: { createdAt: 'desc' },
+        include: { payment: true },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.ledgerEntry.count({ where: { accountId } }),
+    ]);
+
+    return { data, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   }
 }

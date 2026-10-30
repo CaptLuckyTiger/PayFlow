@@ -8,6 +8,7 @@ import { Agent } from 'undici';
 import type { LookupFunction } from 'node:net';
 import {
   FakePaymentProvider,
+  decryptWebhookSecret,
   parseAllowedWebhookHosts,
   resolvePublicWebhookAddresses,
   signWebhookPayload,
@@ -431,7 +432,12 @@ export class OutboxDispatcherService implements OnModuleInit, OnModuleDestroy {
         providerReference: payment.providerReference,
       },
     };
-    const signed = signWebhookPayload(delivery.endpoint.secret, delivery.eventId, payload);
+    const encryptionKey = this.config.get<string>('JWT_REFRESH_SECRET');
+    if (!encryptionKey) {
+      throw new Error('JWT_REFRESH_SECRET is required to deliver webhooks.');
+    }
+    const signingSecret = decryptWebhookSecret(delivery.endpoint.secret, encryptionKey);
+    const signed = signWebhookPayload(signingSecret, delivery.eventId, payload);
     const requestOptions: RequestInit & { dispatcher: Agent } = {
       method: 'POST',
       headers: {

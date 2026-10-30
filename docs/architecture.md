@@ -26,10 +26,23 @@ The code separates controllers, DTOs, services, persistence, providers, and queu
 5. Approved payments receive one debit ledger entry in the same transaction as settlement.
 6. Active webhook endpoints receive signed `payment.updated` callbacks through the worker queue; each endpoint/event pair is unique and transient delivery errors are retried.
 
+```mermaid
+flowchart LR
+  Web[Dashboard web] --> API[API NestJS]
+  API --> DB[(PostgreSQL)]
+  API --> Outbox[Outbox events]
+  Outbox --> Worker[Worker]
+  Worker --> Redis[(Redis / BullMQ)]
+  Worker --> Provider[Payment provider]
+  Worker --> Hook[Webhook endpoint]
+```
+
 ## Security model
 
 - Passwords are hashed with Argon2.
 - JWT is used for access and refresh tokens.
 - Webhook URLs are validated to reject localhost, private networks, and cloud metadata endpoints.
 - Payloads are signed with HMAC-SHA256.
-- Rate limiting and CORS are configured at the app layer.
+- Rate limiting is enforced by a global `ThrottlerGuard` (30 requests per minute by default);
+  authentication endpoints are limited to 5 requests per minute.
+- CORS is configured from `CORS_ORIGIN`, including the Vite development ports `5173` and `5174`.

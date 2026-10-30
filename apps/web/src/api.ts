@@ -120,7 +120,8 @@ export async function getUserProfile(): Promise<User> {
 }
 
 export async function listPayments(): Promise<Payment[]> {
-  return request<Payment[]>('/v1/payments');
+  const response = await request<{ data: Payment[] }>('/v1/payments');
+  return response.data;
 }
 
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {

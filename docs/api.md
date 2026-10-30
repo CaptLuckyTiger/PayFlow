@@ -30,6 +30,17 @@ The API is served under the `/v1` prefix and requires a bearer JWT token for pro
 - `DELETE /v1/webhooks/endpoints/:id`
 - `GET /v1/webhooks/deliveries`
 
+As listagens pagináveis aceitam `page` (padrão `1`) e `limit` (padrão `25`, máximo `100`) e
+retornam `{ "data": [...], "pagination": { "page", "limit", "total", "totalPages" } }`:
+
+- `GET /v1/payments?page=1&limit=25`
+- `GET /v1/accounts/:id/ledger?page=1&limit=25`
+- `GET /v1/webhooks/deliveries?page=1&limit=25`
+
+## Health
+
+- `GET /health` retorna `200` somente quando a API consegue consultar o PostgreSQL.
+
 ## Error semantics
 
 - `400`: invalid payload or invalid resource state.

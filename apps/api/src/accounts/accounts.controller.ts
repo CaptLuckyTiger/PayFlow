@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AccountsService } from './accounts.service';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { PaginationDto } from '../common/dto/pagination.dto';
 
 @ApiTags('accounts')
 @Controller('v1/accounts')
@@ -32,7 +33,7 @@ export class AccountsController {
 
   @Get(':id/ledger')
   @ApiOperation({ summary: 'List ledger entries for an account' })
-  async ledger(@CurrentUser() user: { userId: string }, @Param('id') id: string) {
-    return this.accountsService.ledger(user.userId, id);
+  async ledger(@CurrentUser() user: { userId: string }, @Param('id') id: string, @Query() pagination: PaginationDto) {
+    return this.accountsService.ledger(user.userId, id, pagination.page, pagination.limit);
   }
 }

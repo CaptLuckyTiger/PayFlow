@@ -1,9 +1,10 @@
-import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CreateWebhookEndpointDto } from './dto/create-webhook-endpoint.dto';
 import { WebhooksService } from './webhooks.service';
+import { PaginationDto } from '../common/dto/pagination.dto';
 
 @ApiTags('webhooks')
 @Controller('v1/webhooks')
@@ -32,7 +33,7 @@ export class WebhooksController {
 
   @Get('deliveries')
   @ApiOperation({ summary: 'List webhook delivery attempts' })
-  async listDeliveries(@CurrentUser() user: { userId: string }) {
-    return this.webhooksService.listDeliveries(user.userId);
+  async listDeliveries(@CurrentUser() user: { userId: string }, @Query() pagination: PaginationDto) {
+    return this.webhooksService.listDeliveries(user.userId, pagination.page, pagination.limit);
   }
 }

@@ -96,7 +96,7 @@ A suíte de integração exige PostgreSQL. A suíte E2E também inicia a API e o
 - `ALLOWED_WEBHOOK_HOSTS` é uma lista opcional de hosts exatos separados por vírgula. Quando configurada, apenas esses hosts podem ser registrados ou utilizados para entrega; wildcards e correspondências por sufixo não são permitidos. Quando vazia, qualquer hostname público compatível com as validações pode ser aceito.
 - No momento da entrega, o worker resolve o hostname de cada conexão e rejeita o destino se qualquer endereço resolvido for não público, incluindo redes privadas, loopback, link-local, reservadas ou endereços IPv4 mapeados para redes privadas. O endereço público resolvido é fixado na conexão para prevenir rebinding de DNS entre a validação e a conexão real.
 - Redirecionamentos não são seguidos. Uma resposta de redirecionamento é tratada como falha na entrega e pode ser reenviada.
-- Os segredos dos endpoints são retornados na criação do registro para permitir que o proprietário configure verificação de assinatura. Eles não são expostos pelas APIs de listagem. O banco atual armazena esses segredos em texto puro; use apenas dados locais confiáveis até a implementação de criptografia em repouso e gerenciamento seguro de segredos em ambiente de produção.
+- Os segredos dos endpoints são retornados na criação do registro para permitir que o proprietário configure verificação de assinatura. Eles não são expostos pelas APIs de listagem e são cifrados em repouso com AES-256-GCM usando uma chave derivada de `JWT_REFRESH_SECRET`.
 
 ## Garantias de pagamento e processamento
 
@@ -124,6 +124,10 @@ A suíte de integração exige PostgreSQL. A suíte E2E também inicia a API e o
 - `GET /v1/webhooks/endpoints`
 - `DELETE /v1/webhooks/endpoints/:id`
 - `GET /v1/webhooks/deliveries`
+
+As listagens de pagamentos, ledger e entregas aceitam `page` (padrão `1`) e `limit` (padrão
+`25`, máximo `100`) e retornam os itens em `data` acompanhados de metadados em `pagination`.
+O endpoint `GET /health` verifica a conectividade com o PostgreSQL.
 
 ## Observações importantes
 
